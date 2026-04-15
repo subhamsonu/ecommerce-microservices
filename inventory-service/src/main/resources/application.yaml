@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: inventory-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/e_commerce_db?characterEncoding=latin1&useConfigs=maxPerformance&allowPublicKeyRetrieval=true&useSSL=false&sessionVariables=sql_mode=''}
+    username: root
+    password: Subham@1234
+  jpa:
+    hibernate:
+      ddl-auto: update
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: inventory-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      max-poll-records: 100
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.type.mapping: "orderEvent:com.smartmart.inventory_service.dto.OrderEventDto,paymentEvent:com.smartmart.inventory_service.dto.PaymentDto"
+  web:
+    error:
+      include-message: always
+      include-binding-errors: always
+
+server:
+  port: 8200
+
+
