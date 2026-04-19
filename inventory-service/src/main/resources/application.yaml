@@ -29,6 +29,25 @@ spring:
       include-binding-errors: always
 
 server:
-  port: 8200
+  port: 8389
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
 
+logging:
+  level:
+    root: INFO
+    com.smartmart: DEBUG
+  file:
+    name: logs/inventory-service.log
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/

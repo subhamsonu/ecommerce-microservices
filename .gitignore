@@ -1,0 +1,7 @@
+/logs
+*.log
+*.log
+/payment-service/logs
+/order-service/logs
+/order-service/logs
+*.log

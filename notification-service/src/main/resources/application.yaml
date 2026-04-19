@@ -10,21 +10,6 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.MySQL8Dialect
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    consumer:
-      group-id: notification-service-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "*"
   web:
     error:
       include-message: always
@@ -33,8 +18,6 @@ spring:
 # Server configuration
 server:
   port: 8124
-  servlet:
-    context-path: /
 
 # Logging configuration
 logging:
@@ -57,20 +40,10 @@ payment-service:
     get-payment: /api/payments/{id}
     update-status: /api/payments/{id}/status
 
-# Notification configuration
-notification:
-  email:
-    enabled: true
-    from: noreply@smartmart.com
-    smtp-host: smtp.gmail.com
-    smtp-port: 587
-    username: your-email@gmail.com
-    password: your-app-password
-  sms:
-    enabled: true
-    provider: twilio
-    account-sid: your-account-sid
-    auth-token: your-auth-token
-    from-number: +1234567890
-  max-retries: 3
-  retry-delay-ms: 5000
+# Eureka Client configuration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
