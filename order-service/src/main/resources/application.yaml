@@ -1,73 +1,13 @@
 spring:
   application:
     name: order-service
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/e_commerce_db?characterEncoding=latin1&useConfigs=maxPerformance&allowPublicKeyRetrieval=true&useSSL=false&sessionVariables=sql_mode=''
-    username: root
-    password: Subham@1234
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
-  web:
-    error:
-      include-message: always
-      include-binding-errors: always
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-    consumer:
-      group-id: order-service-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "*"
+  config:
+    import: optional:configserver:http://localhost:8888
+    fail-fast: true
+  cloud:
+    config:
+      enabled: true
+      uri: http://localhost:8888
+      retry:
+        max-attempts: 5
 
-# Server configuration
-server:
-  port: 8123
-  servlet:
-    context-path: /
-
-# Logging configuration
-logging:
-  level:
-    root: INFO
-    com.smartmart.orderservice: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-  file:
-    name: logs/order-service.log
-    max-size: 10MB
-    max-history: 10
-
-# Payment Service API reference
-payment-service:
-  url: http://localhost:8122
-  endpoints:
-    process-payment: /api/payments/process
-    get-payment: /api/payments/{id}
-    update-status: /api/payments/{id}/status
-
-# Notification Service API reference
-notification-service:
-  url: http://localhost:8124
-  endpoints:
-    send-notification: /api/notifications/send
-    get-notification: /api/notifications/{id}
-    update-status: /api/notifications/{id}/status
-
-eureka:
-  client:
-    service-url:
-        defaultZone: http://localhost:8761/eureka/
-    register-with-eureka: true
-    fetch-registry: true

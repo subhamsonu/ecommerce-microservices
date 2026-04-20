@@ -5,3 +5,7 @@
 /order-service/logs
 /order-service/logs
 *.log
+*.log
+/product-service/logs
+/payment-service/logs
+/order-service/logs
