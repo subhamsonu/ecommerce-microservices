@@ -22,7 +22,7 @@ import com.smartmart.orderservice.entity.Order;
 import com.smartmart.orderservice.service.OrderService;
 
 @RestController
-@RequestMapping("/api/order-events")
+@RequestMapping("/api/orders")
 public class OrderController {
 
     private static final Logger log = LoggerFactory.getLogger(OrderController.class);
@@ -30,7 +30,7 @@ public class OrderController {
     @Autowired
     private OrderService orderService;
 
-    @PostMapping
+    @PostMapping("/create")
     public ResponseEntity<String> addOrder(@Valid @RequestBody OrderEventDto orderDto) {
         try {
             log.info("Creating new order with productId: {}, quantity: {}", orderDto.getProductId(), orderDto.getQuantity());

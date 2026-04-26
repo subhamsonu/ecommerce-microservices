@@ -2,6 +2,8 @@ package com.smartmart.inventory_service.serviceImpl;
 
 import java.time.LocalDateTime;
 
+import com.smartmart.inventory_service.dto.OrderEventDto;
+import com.smartmart.inventory_service.kafka.InventoryProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,139 +22,149 @@ import com.smartmart.inventory_service.util.InventoryValidator;
 @Transactional
 public class InventoryServiceImpl implements InventoryService {
 
-	private static final Logger log = LoggerFactory.getLogger(InventoryServiceImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(InventoryServiceImpl.class);
 
-	@Autowired
-	private InventoryRepository inventoryRepository;
+    @Autowired
+    private InventoryProducer inventoryProducer;
 
-	@Override
-	@Transactional(readOnly = true)
-	public Inventory findByProductId(Integer productId) {
-		// Validate product ID
-		InventoryValidator.validateProductId(productId);
+    @Autowired
+    private InventoryRepository inventoryRepository;
 
-		// Fetch inventory from repository
-		Inventory inventory = inventoryRepository.findByProductId(productId);
+    @Override
+    @Transactional(readOnly = true)
+    public Inventory findByProductId(Integer productId) {
+        // Validate product ID
+        InventoryValidator.validateProductId(productId);
 
-		// Validate that inventory exists
-		InventoryValidator.validateInventoryExists(inventory, productId);
-		log.info("Found inventory for product ID: {}", productId);
+        // Fetch inventory from repository
+        Inventory inventory = inventoryRepository.findByProductId(productId);
 
-		return inventory;
-	}
+        // Validate that inventory exists
+        InventoryValidator.validateInventoryExists(inventory, productId);
+        log.info("Found inventory for product ID: {}", productId);
 
-	@Override
-	public void deleteByProductId(Integer productId) {
+        return inventory;
+    }
 
-		InventoryValidator.validateProductId(productId);
+    @Override
+    public void deleteByProductId(Integer productId) {
 
-		Inventory inventory = inventoryRepository.findByProductId(productId);
-		InventoryValidator.validateInventoryExists(inventory, productId);
+        InventoryValidator.validateProductId(productId);
 
-		inventoryRepository.deleteByProductId(productId);
-		log.info("Deleted inventory for product ID: {}", productId);
-	}
+        Inventory inventory = inventoryRepository.findByProductId(productId);
+        InventoryValidator.validateInventoryExists(inventory, productId);
 
-	@Override
-	public Inventory saveInventory(Inventory inventory) {
+        inventoryRepository.deleteByProductId(productId);
+        log.info("Deleted inventory for product ID: {}", productId);
+    }
 
-		InventoryValidator.validateInventoryObject(inventory);
+    @Override
+    public Inventory saveInventory(Inventory inventory) {
 
-		inventory.setReservedQuantity(0);
-		Inventory savedInventory = inventoryRepository.save(inventory);
-		log.info("Saved inventory for product ID: {}", inventory.getProductId());
-		return savedInventory;
-	}
+        InventoryValidator.validateInventoryObject(inventory);
 
-	@Override
-	public void deleteInventory(Integer id) {
-		InventoryValidator.validateInventoryId(id);
+        inventory.setReservedQuantity(0);
+        Inventory savedInventory = inventoryRepository.save(inventory);
+        log.info("Saved inventory for product ID: {}", inventory.getProductId());
+        return savedInventory;
+    }
 
-		inventoryRepository.deleteById(id);
-		log.info("Deleted inventory with ID: {}", id);
-	}
+    @Override
+    public void deleteInventory(Integer id) {
+        InventoryValidator.validateInventoryId(id);
 
-	@Override
-	public void reserveInventory(Integer productId, Integer quantity) {
+        inventoryRepository.deleteById(id);
+        log.info("Deleted inventory with ID: {}", id);
+    }
 
-		InventoryValidator.validateProductId(productId);
-		InventoryValidator.validateQuantity(quantity);
+    @Override
+    public void reserveInventory(OrderEventDto orderEventDto) {
 
-		Inventory inventory = inventoryRepository.findByProductId(productId);
-		if (inventory != null) {
-			InventoryValidator.validateSufficientQuantity(inventory.getQuantity(), quantity);
+        Integer productId = orderEventDto.getProductId();
+        Integer quantity = orderEventDto.getQuantity();
 
-			inventory.setQuantity(inventory.getQuantity() - quantity);
-			inventory.setReservedQuantity(inventory.getReservedQuantity() + quantity);
+        InventoryValidator.validateProductId(productId);
+        InventoryValidator.validateQuantity(quantity);
 
-			if (inventory.getQuantity() == 0) {
-				inventory.setStatus(InventoryStatus.RESERVED);
-			} else {
-				inventory.setStatus(InventoryStatus.IN_STOCK);
-			}
-			inventory.setUpdatedAt(LocalDateTime.now());
+        Inventory inventory = inventoryRepository.findByProductId(productId);
+        if (inventory != null) {
+            InventoryValidator.validateSufficientQuantity(inventory.getQuantity(), quantity);
 
-			inventoryRepository.save(inventory);
-			log.info("Reserved {} units for product ID: {}", quantity, productId);
+            inventory.setQuantity(inventory.getQuantity() - quantity);
+            inventory.setReservedQuantity(inventory.getReservedQuantity() + quantity);
 
-		} else {
-			log.error("Inventory not found for product ID: {}", productId);
-			throw new InventoryNotFoundException("Inventory not found for product ID: " + productId);
-		}
-	}
+            if (inventory.getReservedQuantity() > 0) {
+                inventory.setStatus(InventoryStatus.RESERVED); // some stock is reserved
+            } else {
+                inventory.setStatus(InventoryStatus.IN_STOCK); // no reservations
+            }
+            inventory.setUpdatedAt(LocalDateTime.now());
 
-	@Override
-	public void releaseStock(PaymentDto paymentDto) {
+            inventoryRepository.save(inventory);
+            log.info("Reserved {} units for product ID: {}", quantity, productId);
 
-		Inventory inventory = inventoryRepository.findByProductId(paymentDto.getProductId());
-		if (inventory == null) {
-			log.error("Inventory not found for product ID: {}", paymentDto.getProductId());
-			throw new InventoryNotFoundException("Inventory not found for productId: " + paymentDto.getProductId());
-		}
+            inventoryProducer.sendOrderAfterInventoryReserved(orderEventDto);
+            log.info("Sent inventory reserved event to Kafka for product ID: {}", productId);
 
-		// Validate that we have enough reserved quantity to release
-		if (inventory.getReservedQuantity() < paymentDto.getQuantity()) {
-			log.error("Cannot release {} units - only {} units reserved for product ID: {}",
-				paymentDto.getQuantity(), inventory.getReservedQuantity(), paymentDto.getProductId());
-			throw new IllegalStateException("Insufficient reserved quantity to release for product ID: " + paymentDto.getProductId());
-		}
+        } else {
+            log.error("Inventory not found for product ID: {}", productId);
+            throw new InventoryNotFoundException("Inventory not found for product ID: " + productId);
+        }
+    }
 
-		inventory.setQuantity(inventory.getQuantity() + paymentDto.getQuantity());
-		inventory.setReservedQuantity(inventory.getReservedQuantity() - paymentDto.getQuantity());
-		inventory.setStatus(InventoryStatus.IN_STOCK);
-		inventory.setUpdatedAt(LocalDateTime.now());
-		inventoryRepository.save(inventory);
-		log.info("Released {} units for product ID: {}", paymentDto.getQuantity(), paymentDto.getProductId());
-	}
+    @Override
+    public void releaseStock(PaymentDto paymentDto) {
 
-	@Override
-	public void deductStock(PaymentDto paymentDto) {
+        Inventory inventory = inventoryRepository.findByProductId(paymentDto.getProductId());
+        if (inventory == null) {
+            log.error("Inventory not found for product ID: {}", paymentDto.getProductId());
+            throw new InventoryNotFoundException("Inventory not found for productId: " + paymentDto.getProductId());
+        }
 
-		Inventory inventory = inventoryRepository.findByProductId(paymentDto.getProductId());
-		if (inventory == null) {
-			log.error("Inventory not found for product ID: {}", paymentDto.getProductId());
-			throw new InventoryNotFoundException("Inventory not found for productId: " + paymentDto.getProductId());
-		}
+        // Validate that we have enough reserved quantity to release
+        if (inventory.getReservedQuantity() < paymentDto.getQuantity()) {
+            log.error("Cannot release {} units - only {} units reserved for product ID: {}",
+                    paymentDto.getQuantity(), inventory.getReservedQuantity(), paymentDto.getProductId());
+            throw new IllegalStateException("Insufficient reserved quantity to release for product ID: " + paymentDto.getProductId());
+        }
 
-		// Validate that we have enough reserved quantity to deduct
-		if (inventory.getReservedQuantity() < paymentDto.getQuantity()) {
-			log.error("Cannot deduct {} units - only {} units reserved for product ID: {}",
-				paymentDto.getQuantity(), inventory.getReservedQuantity(), paymentDto.getProductId());
-			throw new IllegalStateException("Insufficient reserved quantity to deduct for product ID: " + paymentDto.getProductId());
-		}
+        inventory.setQuantity(inventory.getQuantity() + paymentDto.getQuantity());
+        inventory.setReservedQuantity(inventory.getReservedQuantity() - paymentDto.getQuantity());
+        inventory.setStatus(InventoryStatus.IN_STOCK);
+        inventory.setUpdatedAt(LocalDateTime.now());
+        inventoryRepository.save(inventory);
+        log.info("Released {} units for product ID: {}", paymentDto.getQuantity(), paymentDto.getProductId());
+    }
 
-		inventory.setReservedQuantity(inventory.getReservedQuantity() - paymentDto.getQuantity());
+    @Override
+    public void deductStock(PaymentDto paymentDto) {
 
-		if (inventory.getQuantity() == 0 && inventory.getReservedQuantity() == 0) {
-			inventory.setStatus(InventoryStatus.OUT_OF_STOCK);
-		} else {
-			inventory.setStatus(InventoryStatus.IN_STOCK);
-		}
+        Inventory inventory = inventoryRepository.findByProductId(paymentDto.getProductId());
+        if (inventory == null) {
+            log.error("Inventory not found for product ID: {}", paymentDto.getProductId());
+            throw new InventoryNotFoundException("Inventory not found for productId: " + paymentDto.getProductId());
+        }
+        log.info("Reserve Quantity before deduction for product ID {}: {} and DB inventory reserved Quantity : {}", paymentDto.getProductId(), paymentDto.getQuantity(), inventory.getReservedQuantity());
 
-		inventory.setUpdatedAt(LocalDateTime.now());
-		inventoryRepository.save(inventory);
-		log.info("Deducted {} units from product ID: {}", paymentDto.getQuantity(), paymentDto.getProductId());
+        // Validate that we have enough reserved quantity to deduct
+        if (inventory.getReservedQuantity() < paymentDto.getQuantity()) {
+            log.error("Cannot deduct {} units - only {} units reserved for product ID: {}",
+                    paymentDto.getQuantity(), inventory.getReservedQuantity(), paymentDto.getProductId());
+            throw new IllegalStateException("Insufficient reserved quantity to deduct for product ID: " + paymentDto.getProductId());
+        }
 
-	}
+        inventory.setReservedQuantity(inventory.getReservedQuantity() - paymentDto.getQuantity());
+
+        if (inventory.getQuantity() == 0 && inventory.getReservedQuantity() == 0) {
+            inventory.setStatus(InventoryStatus.OUT_OF_STOCK);
+        } else {
+            inventory.setStatus(InventoryStatus.IN_STOCK);
+        }
+
+        inventory.setUpdatedAt(LocalDateTime.now());
+        inventoryRepository.save(inventory);
+        log.info("Deducted {} units from product ID: {}", paymentDto.getQuantity(), paymentDto.getProductId());
+
+    }
 
 }

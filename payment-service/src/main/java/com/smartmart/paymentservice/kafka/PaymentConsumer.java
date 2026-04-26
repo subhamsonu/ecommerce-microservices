@@ -13,7 +13,7 @@ import com.smartmart.paymentservice.service.PaymentService;
 public class PaymentConsumer {
 
 	private static final Logger log = LoggerFactory.getLogger(PaymentConsumer.class);
-	private static final String TOPIC = "order-topic";
+	private static final String TOPIC = "inventory-topic";
 	
 	@Autowired
 	private PaymentService paymentService;
@@ -30,5 +30,8 @@ public class PaymentConsumer {
 			throw e;
 		}
 	}
+
+
+
 }
 
