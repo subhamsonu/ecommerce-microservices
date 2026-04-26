@@ -20,11 +20,10 @@ public class KafkaConsumer {
 	private InventoryService inventoryService;
 
 	@KafkaListener(topics = "order-topic", groupId = "inventory-service-group", containerFactory = "kafkaListenerContainerFactory")
-
 	public void orderConsumer(OrderEventDto order) {
 		log.info("Consumed order: {}", order.getOrderId());
-
-		inventoryService.reserveInventory(order.getProductId(), order.getQuantity());
+		inventoryService.reserveInventory(order);
+		log.info("Finished consuming order: {}", order.getOrderId());
 
 	}
 
@@ -41,6 +40,9 @@ public class KafkaConsumer {
 				log.warn("Processing failed payment for order: {}", paymentDto.getOrderId());
 				inventoryService.releaseStock(paymentDto);
 				log.info("Successfully released stock for order: {}", paymentDto.getOrderId());
+			}
+			else {
+				log.warn("Unhandled payment status: {} for orderId: {}", paymentDto.getStatus(), paymentDto.getOrderId());
 			}
 		} catch (IllegalStateException e) {
 			log.error("State error processing payment for order {}: {}", paymentDto.getOrderId(), e.getMessage());

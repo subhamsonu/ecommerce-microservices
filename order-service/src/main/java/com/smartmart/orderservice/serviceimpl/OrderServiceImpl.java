@@ -1,25 +1,23 @@
 package com.smartmart.orderservice.serviceimpl;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
+import com.smartmart.orderservice.dto.*;
+import com.smartmart.orderservice.entity.Order;
+import com.smartmart.orderservice.exception.ProductNotFoundException;
+import com.smartmart.orderservice.feignconfig.ProductClient;
+import com.smartmart.orderservice.kafka.OrderProducer;
+import com.smartmart.orderservice.repository.OrderRepository;
+import com.smartmart.orderservice.service.OrderService;
+import com.smartmart.orderservice.validator.OrderValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.smartmart.orderservice.dto.OrderEventDto;
-import com.smartmart.orderservice.dto.OrderStatus;
-import com.smartmart.orderservice.dto.PaymentDto;
-import com.smartmart.orderservice.dto.PaymentStatus;
-import com.smartmart.orderservice.entity.Order;
-import com.smartmart.orderservice.kafka.OrderProducer;
-import com.smartmart.orderservice.repository.OrderRepository;
-import com.smartmart.orderservice.service.OrderService;
-import com.smartmart.orderservice.validator.OrderValidator;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -31,24 +29,33 @@ public class OrderServiceImpl implements OrderService {
 	private OrderRepository orderRepository;
 
 	@Autowired
-	private OrderValidator OrderValidator;
+	private OrderValidator orderValidator;
 
 	@Autowired
 	private OrderProducer producer;
 
+	@Autowired
+	private ProductClient productClient;
+
 	@Override
 	public Order createOrder(OrderEventDto orderDto) {
 		try {
+			orderValidator.validateOrder(orderDto);
+			ProductResponseDto product = productClient.getProductById(orderDto.getProductId());
+
+			if (product == null) {
+				throw new ProductNotFoundException("Product not found");
+			}
+
+			Double amount = product.getPrice() * orderDto.getQuantity();
+
 			Order order = Order.builder().productId(orderDto.getProductId())
 					.quantity(orderDto.getQuantity())
-					.amount(orderDto.getTotalAmount())
+					.amount(amount)
 					.orderId(generateUniqueOrderId())
 					.status(OrderStatus.CREATED)
 					.createdAt(LocalDateTime.now())
 					.build();
-
-			OrderValidator.validateNewOrder(order);
-
 			Order orderEntity = orderRepository.save(order);
 			log.info("Order created successfully with ID: {}, orderId: {}", orderEntity.getId(), orderEntity.getOrderId());
 
@@ -73,8 +80,6 @@ public class OrderServiceImpl implements OrderService {
 	@Override
 	@Transactional(readOnly = true)
 	public Optional<Order> getOrder(Integer id) {
-		// Validate ID
-		OrderValidator.validateOrderId(id);
 
 		// Retrieve from repository
 		log.debug("Fetching order with ID: {}", id);
@@ -90,8 +95,6 @@ public class OrderServiceImpl implements OrderService {
 
 	@Override
 	public boolean deleteOrder(Integer id) {
-
-		OrderValidator.validateOrderId(id);
 
 		if (orderRepository.existsById(id)) {
 			orderRepository.deleteById(id);

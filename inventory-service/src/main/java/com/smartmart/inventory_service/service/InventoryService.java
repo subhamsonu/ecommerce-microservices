@@ -1,5 +1,6 @@
 package com.smartmart.inventory_service.service;
 
+import com.smartmart.inventory_service.dto.OrderEventDto;
 import com.smartmart.inventory_service.dto.PaymentDto;
 import com.smartmart.inventory_service.entity.Inventory;
 
@@ -13,7 +14,7 @@ public interface InventoryService {
 	
 	void deleteInventory(Integer id);
 	
-	 void reserveInventory(Integer productId, Integer quantity);
+	 void reserveInventory(OrderEventDto orderEventDto);
 	 	 
 	 public void releaseStock(PaymentDto paymentDto);
 	 
